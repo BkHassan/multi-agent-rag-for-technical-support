@@ -153,6 +153,8 @@ The two model values differ on purpose. Without `LLM_MODEL`, the code uses `gemi
 
 ## Tests and evaluation
 
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the offline backend tests, the frontend lint, tests and production build, and builds both Docker images on every pull request and push to `main`. It uses no secrets and makes no Gemini calls.
+
 **Offline tests** (deterministic; models and retrieval are faked, no API calls):
 
 ```bash
