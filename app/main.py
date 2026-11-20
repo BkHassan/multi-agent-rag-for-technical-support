@@ -10,10 +10,12 @@ from fastapi.responses import JSONResponse
 from google.genai import errors as genai_errors
 
 from app import observability as obs
+from app.config import settings
 from app.orchestration import handle_support_ticket
 from app.orchestration.coordinator import CoordinatorFailure
 from app.schemas import AgentResponse, SupportTicket
 
+obs.configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 # Client-facing details are fixed sentences. Exception text, upstream Gemini messages,

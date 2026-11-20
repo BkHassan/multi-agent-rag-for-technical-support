@@ -40,6 +40,31 @@ CONFIGURATION_OR_INPUT = "configuration_or_input"
 INTERNAL_ERROR = "internal_error"
 
 
+# --- Log output ---------------------------------------------------------------------
+
+_HANDLER_FLAG = "_app_console_handler"
+
+
+def configure_logging(level: str = "INFO") -> None:
+    """Print the API's own log lines, stage and request events included.
+
+    `uvicorn app.main:app` configures only uvicorn's loggers, so without this the
+    root logger's default WARNING level drops every INFO event. A handler on the
+    `app` logger fixes that. It is added once, and not when the root logger already
+    prints (for example after a CLI's `basicConfig`), so no line appears twice.
+    """
+    app_logger = logging.getLogger("app")
+    app_logger.setLevel(level)
+    if logging.getLogger().handlers:
+        return
+    if any(getattr(handler, _HANDLER_FLAG, False) for handler in app_logger.handlers):
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    setattr(handler, _HANDLER_FLAG, True)
+    app_logger.addHandler(handler)
+
+
 # --- Request ID ---------------------------------------------------------------------
 
 

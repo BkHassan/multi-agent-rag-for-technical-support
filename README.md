@@ -145,6 +145,7 @@ Settings live in `app/config.py` and can be overridden by environment variables 
 | `RETRIEVAL_TOP_K` | `5` | Chunks returned per search |
 | `RELEVANCE_MAX_DISTANCE` / `RELEVANCE_MIN_CONTRAST` / `RELEVANCE_CONTRAST_RANK` | `0.3687` / `0.0442` / `5` | Calibrated evidence-gate thresholds |
 | `MODEL_CALL_TIMEOUT_SECONDS` / `TOOL_EXECUTION_TIMEOUT_SECONDS` | `45` / `20` | Per-call bounds |
+| `LOG_LEVEL` | `INFO` | API log level; stage and request events (`event=stage …`) are INFO |
 
 The two model values differ on purpose. Without `LLM_MODEL`, the code uses `gemini-3.8-flash`. `.env.example` overrides it with `gemini-3.5-flash-lite` because, as its comment notes, `gemini-3.8-flash` is limited to about 20 free requests per day. All results above were measured with `gemini-3.5-flash-lite`.
 
