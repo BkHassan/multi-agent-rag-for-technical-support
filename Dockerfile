@@ -9,10 +9,10 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /build
-COPY requirements.txt .
-RUN grep -Ev '^(pytest|[[:space:]]*#|[[:space:]]*$)' requirements.txt > /tmp/runtime.txt \
-    && pip install --upgrade pip \
-    && pip install -r /tmp/runtime.txt
+# Runtime dependencies only (test tools are in requirements-dev.txt), at the locked versions.
+COPY requirements.txt constraints.txt ./
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt -c constraints.txt
 
 
 FROM python:3.12-slim AS runtime

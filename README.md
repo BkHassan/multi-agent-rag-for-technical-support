@@ -98,9 +98,11 @@ Requires Python 3.12 (the version the Docker image and local runs use) and a Gem
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # macOS/Linux
-pip install -r requirements.txt
+pip install -r requirements-dev.txt -c constraints.txt
 copy .env.example .env          # or: cp .env.example .env
 ```
+
+`requirements.txt` holds the runtime dependencies (the Docker image installs only these), `requirements-dev.txt` adds the test tools, and `constraints.txt` locks every transitive version to the tested environment.
 
 Set your key in `.env`. The example file already selects the demo model:
 
