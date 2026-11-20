@@ -5,6 +5,7 @@ import type { AgentResponse, DocumentSource } from '../../../api/types'
 import {
   RECORDED_CLARIFICATION_NEEDED,
   RECORDED_FALLBACK,
+  RECORDED_FALLBACK_NOT_A_PROBLEM,
   RECORDED_GROUNDED_ANSWER,
 } from '../../../test/recordedResponses'
 import { AnalysisResult } from '../AnalysisResult'
@@ -51,6 +52,16 @@ describe('grounded_answer', () => {
     }
   })
 
+  it('links every step of a recorded backend answer to its passage', () => {
+    render(<AnalysisResult response={grounded} />)
+
+    const steps = within(section('Recommended steps')).getAllByRole('listitem')
+    expect(steps).toHaveLength(grounded.recommendations.length)
+    for (const step of steps) {
+      expect(within(step).getByText('From database_connection_failures.md, passage 1')).toBeTruthy()
+    }
+  })
+
   it('links each step to the passage it was copied from, as the backend Writer check does', () => {
     const sources = [
       source({ source: 'db.md', chunk_index: 2, excerpt: '## Fix\nCheck the   pool size.\nThen retry.' }),
@@ -70,7 +81,11 @@ describe('grounded_answer', () => {
   })
 
   it('opens the first document and keeps the rest collapsed', () => {
-    const { container } = render(<AnalysisResult response={grounded} />)
+    const sources = [
+      source({ source: 'db.md', chunk_index: 0, excerpt: 'Check the pool size.' }),
+      source({ source: 'vpn.md', chunk_index: 1, excerpt: 'Confirm the split tunnel routes.' }),
+    ]
+    const { container } = render(<AnalysisResult response={{ ...grounded, sources }} />)
 
     const documents = Array.from(container.querySelectorAll('details'))
     expect(documents).toHaveLength(2)
@@ -194,9 +209,10 @@ describe('fallback', () => {
   })
 
   it('does not blame the documentation, since a fallback can also mean the ticket is not a problem report', () => {
-    const { container } = render(<AnalysisResult response={{ ...fallback, sources: [] }} />)
+    const { container } = render(<AnalysisResult response={RECORDED_FALLBACK_NOT_A_PROBLEM as AgentResponse} />)
 
     expect(screen.getByText(/could not back any troubleshooting step/)).toBeTruthy()
+    expect(container.querySelector('details')).toBeNull()
     expect(container.textContent).not.toMatch(/does not contain enough relevant evidence|did not meet the evidence/)
   })
 
