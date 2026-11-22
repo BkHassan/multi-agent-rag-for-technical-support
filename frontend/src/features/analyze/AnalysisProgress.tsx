@@ -3,7 +3,7 @@ import { ANALYZE_TIMEOUT_MS } from '../../api/tickets'
 import { Spinner } from '../../components/ui'
 import styles from './ResultPanel.module.css'
 
-/** Matches the latency recorded during evaluation; past this the user is told it is slow. */
+/** Well above the 3.2 s median recorded during evaluation; past this the user is told it is slow. */
 const SLOW_AFTER_SECONDS = 30
 
 function useElapsedSeconds(): number {
