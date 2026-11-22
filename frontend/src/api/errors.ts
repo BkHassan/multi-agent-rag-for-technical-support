@@ -36,8 +36,8 @@ interface ApiErrorInit {
 
 /**
  * A request failure with a message that is safe to show. Backend `detail` text is
- * never surfaced verbatim: it can contain upstream Gemini messages or configuration
- * details, so only field validation messages and a retry delay are extracted.
+ * never surfaced verbatim. Only field validation messages, a retry delay, and the
+ * backend's own fixed sentences (matched exactly, see KNOWN_DETAILS) are used.
  */
 export class ApiError extends Error {
   readonly kind: ApiErrorKind
@@ -107,6 +107,29 @@ function retryAfterFrom(detail: unknown): number | undefined {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
 }
 
+/**
+ * Fixed sentences the backend sends as `detail` (app/main.py DETAIL_*, app/orchestration/
+ * workflow.py CLIENT_*), mapped to console text. Matching is exact, so no other text gets through.
+ */
+const KNOWN_DETAILS: Partial<Record<number, Record<string, string>>> = {
+  400: {
+    'GOOGLE_API_KEY is not configured on the server.':
+      'The backend has no Gemini API key configured. Set GOOGLE_API_KEY in its .env file and restart it.',
+  },
+  503: {
+    'The analysis timed out.': 'A stage of the analysis ran past its time limit and was stopped. Try again.',
+    'The language model is temporarily unavailable.': 'The language model is busy or unavailable. Try again shortly.',
+    'Upstream Gemini service error. Please try again shortly.':
+      'The language model is busy or unavailable. Try again shortly.',
+    'Ticket classification failed.':
+      'Triage could not classify this ticket. Try again; if it keeps failing, rephrase the description.',
+  },
+}
+
+function knownDetail(status: number, detail: unknown): string | undefined {
+  return typeof detail === 'string' ? KNOWN_DETAILS[status]?.[detail] : undefined
+}
+
 export function errorFromResponse(status: number, body: unknown): ApiError {
   const detail = detailOf(body)
 
@@ -124,6 +147,7 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
         kind: 'bad_request',
         status,
         message:
+          knownDetail(status, detail) ??
           'The backend could not process this request. Its configuration may be incomplete (for example, a missing Gemini API key). Check the backend logs.',
       })
     case 429: {
@@ -155,7 +179,9 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
       return new ApiError({
         kind: 'unavailable',
         status,
-        message: 'The analysis service is temporarily unavailable, often because the model is busy. Try again shortly.',
+        message:
+          knownDetail(status, detail) ??
+          'The analysis service is temporarily unavailable, often because the model is busy. Try again shortly.',
       })
     case 500:
       return new ApiError({

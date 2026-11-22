@@ -170,6 +170,24 @@ describe('analyzeTicket HTTP errors', () => {
     expect(upstream.message).not.toContain('model not found')
   })
 
+  it.each([
+    [400, 'GOOGLE_API_KEY is not configured on the server.', /no Gemini API key configured/],
+    [503, 'The analysis timed out.', /ran past its time limit/],
+    [503, 'The language model is temporarily unavailable.', /busy or unavailable/],
+    [503, 'Ticket classification failed.', /could not classify this ticket/],
+  ])('explains the backend fixed sentence for HTTP %i: %s', async (status, detail, expected) => {
+    const error = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(jsonResponse(status, { detail })) }))
+    expect(error.message).toMatch(expected)
+    expect(error.message).not.toBe(detail)
+  })
+
+  it('keeps the generic 503 message for a detail it does not know exactly', async () => {
+    const body = { detail: 'The analysis timed out. Worker 3 at /srv/app' }
+    const error = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(jsonResponse(503, body)) }))
+    expect(error.message).toMatch(/temporarily unavailable/)
+    expect(error.message).not.toMatch(/Worker|srv/)
+  })
+
   it('maps 503 to a temporary unavailability', async () => {
     const body = { detail: 'Upstream Gemini service error: The model is overloaded due to high demand.' }
     const error = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(jsonResponse(503, body)) }))
