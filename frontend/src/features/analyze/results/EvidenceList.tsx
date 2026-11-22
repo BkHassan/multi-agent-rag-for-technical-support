@@ -72,7 +72,7 @@ export function EvidenceList({ sources, openCount = 1 }: EvidenceListProps) {
                   <div className={styles.passageMeta}>
                     <span>{passageLabel(passage, passageIndex)}</span>
                     {passage.distance !== null ? (
-                      <span title="Cosine distance between the ticket and this passage; lower is closer.">
+                      <span title="Cosine distance between the search query and this passage; lower is closer.">
                         distance {passage.distance.toFixed(3)}
                       </span>
                     ) : null}
