@@ -32,6 +32,7 @@ interface ApiErrorInit {
   status?: number
   fieldErrors?: Partial<Record<TicketField, string>>
   retryAfterSeconds?: number
+  requestId?: string
 }
 
 /**
@@ -44,15 +45,28 @@ export class ApiError extends Error {
   readonly status: number | undefined
   readonly fieldErrors: Partial<Record<TicketField, string>>
   readonly retryAfterSeconds: number | undefined
+  /** The backend's X-Request-ID for this request, so the user can quote it; matches its server logs. */
+  readonly requestId: string | undefined
 
-  constructor({ kind, message, status, fieldErrors = {}, retryAfterSeconds }: ApiErrorInit) {
+  constructor({ kind, message, status, fieldErrors = {}, retryAfterSeconds, requestId }: ApiErrorInit) {
     super(message)
     this.name = 'ApiError'
     this.kind = kind
     this.status = status
     this.fieldErrors = fieldErrors
     this.retryAfterSeconds = retryAfterSeconds
+    this.requestId = requestId
   }
+}
+
+/** Same format the backend accepts for a request ID (app/observability.py). */
+const REQUEST_ID_RE = /^[A-Za-z0-9._-]{1,64}$/
+
+/** The same error with the response's X-Request-ID attached; an ID in any other format is dropped. */
+export function withRequestId(error: ApiError, requestId: string | null): ApiError {
+  if (!requestId || !REQUEST_ID_RE.test(requestId)) return error
+  const { kind, message, status, fieldErrors, retryAfterSeconds } = error
+  return new ApiError({ kind, message, status, fieldErrors, retryAfterSeconds, requestId })
 }
 
 export function isAbortError(error: unknown): boolean {

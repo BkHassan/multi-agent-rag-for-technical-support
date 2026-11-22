@@ -68,6 +68,12 @@ export function AnalysisError({ error, onRetry }: AnalysisErrorProps) {
       <p className={styles.errorFootnote}>
         Your ticket is still in the form.
         {error.status ? <span className={styles.statusCode}> HTTP {error.status}</span> : null}
+        {error.requestId ? (
+          <span className={styles.statusCode}>
+            {error.status ? ' · ' : ' '}
+            Request ID <span className={styles.requestId}>{error.requestId}</span>
+          </span>
+        ) : null}
       </p>
     </Callout>
   )

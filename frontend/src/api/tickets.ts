@@ -1,5 +1,5 @@
 import { apiUrl } from './config'
-import { ApiError, errorFromResponse } from './errors'
+import { ApiError, errorFromResponse, withRequestId } from './errors'
 import { parseAgentResponse } from './parseAgentResponse'
 import type { AgentResponse, SupportTicket } from './types'
 
@@ -65,8 +65,13 @@ export async function analyzeTicket(ticket: SupportTicket, options: AnalyzeOptio
       })
     }
 
-    if (!response.ok) throw errorFromResponse(response.status, body)
-    return parseAgentResponse(body)
+    const requestId = response.headers.get('X-Request-ID')
+    if (!response.ok) throw withRequestId(errorFromResponse(response.status, body), requestId)
+    try {
+      return parseAgentResponse(body)
+    } catch (error) {
+      throw error instanceof ApiError ? withRequestId(error, requestId) : error
+    }
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', forwardAbort)

@@ -188,6 +188,21 @@ describe('analyzeTicket HTTP errors', () => {
     expect(error.message).not.toMatch(/Worker|srv/)
   })
 
+  it('attaches a well-formed X-Request-ID to the error and drops a malformed one', async () => {
+    const withId = (status: number, body: string, id: string) =>
+      new Response(body, { status, headers: { 'Content-Type': 'application/json', 'X-Request-ID': id } })
+
+    const server = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(withId(500, '{}', 'a1b2c3d4')) }))
+    expect(server.requestId).toBe('a1b2c3d4')
+
+    const unreadable = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(withId(200, '{}', 'req-42')) }))
+    expect(unreadable.kind).toBe('invalid_response')
+    expect(unreadable.requestId).toBe('req-42')
+
+    const malformed = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(withId(500, '{}', '<b>x</b>')) }))
+    expect(malformed.requestId).toBeUndefined()
+  })
+
   it('maps 503 to a temporary unavailability', async () => {
     const body = { detail: 'Upstream Gemini service error: The model is overloaded due to high demand.' }
     const error = await failure(analyzeTicket(TICKET, { fetchImpl: fetchReturning(jsonResponse(503, body)) }))

@@ -116,6 +116,24 @@ describe('ticket form', () => {
     expect(requestBody(fetchMock, 1)).toEqual(requestBody(fetchMock, 0))
   })
 
+  it('shows the request ID from the backend with the error, for support requests', async () => {
+    stubFetch(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'The analysis timed out.' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'X-Request-ID': '9f86d081884c' },
+        }),
+      ),
+    )
+    const user = await fillTicket('E-REL-001', DESCRIPTION)
+
+    await user.click(screen.getByRole('button', { name: 'Analyze ticket' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/ran past its time limit/)).toBeTruthy()
+    expect(alert.textContent).toContain('HTTP 503 · Request ID 9f86d081884c')
+  })
+
   it('reports an unreachable backend and keeps the input', async () => {
     stubFetch(() => Promise.reject(new TypeError('Failed to fetch')))
     const user = await fillTicket('E-REL-001', DESCRIPTION)

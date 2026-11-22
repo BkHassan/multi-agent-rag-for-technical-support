@@ -143,6 +143,12 @@
   font-family: var(--font-mono);
 }
 
+/* Selectable in one click, so it can be pasted into a support request. */
+.requestId {
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
 /* Outcome guide (empty state) */
 
 .outcomes {
