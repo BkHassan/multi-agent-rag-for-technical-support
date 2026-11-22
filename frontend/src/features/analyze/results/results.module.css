@@ -181,6 +181,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The passage a step was copied from, under the step. */
+.stepSource {
+  display: block;
+  margin-top: var(--space-0-5);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
 .notes {
   max-width: var(--measure);
   margin: 0;

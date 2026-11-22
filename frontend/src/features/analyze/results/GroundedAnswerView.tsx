@@ -1,15 +1,23 @@
-import type { AgentResponse } from '../../../api/types'
+import type { AgentResponse, DocumentSource } from '../../../api/types'
 import { cx } from '../../../lib/cx'
 import { EvidenceList } from './EvidenceList'
 import { OutcomeHeader } from './OutcomeHeader'
 import { SectionHeader } from './SectionHeader'
+import { passagesForSteps } from './stepSources'
 import styles from './results.module.css'
 
+/** "db.md, passage 3"; matches the passage numbers in the evidence list. */
+function originLabel(passage: DocumentSource): string {
+  return passage.chunk_index !== null ? `${passage.source}, passage ${passage.chunk_index + 1}` : passage.source
+}
+
 export function GroundedAnswerView({ response }: { response: AgentResponse }) {
+  const origins = passagesForSteps(response.recommendations, response.sources)
+
   return (
     <>
       <OutcomeHeader outcome="grounded_answer" title="Documented troubleshooting steps">
-        The agent wrote these steps from documentation passages that passed the relevance check.
+        The Writer copied these steps from documentation passages that passed the evidence gate.
       </OutcomeHeader>
 
       {response.summary ? (
@@ -23,9 +31,15 @@ export function GroundedAnswerView({ response }: { response: AgentResponse }) {
         <SectionHeader title="Recommended steps" provenance="generated" />
         {response.recommendations.length > 0 ? (
           <ol className={styles.steps}>
-            {response.recommendations.map((step, index) => (
-              <li key={index}>{step}</li>
-            ))}
+            {response.recommendations.map((step, index) => {
+              const labels = [...new Set(origins[index].map(originLabel))]
+              return (
+                <li key={index}>
+                  {step}
+                  {labels.length > 0 ? <span className={styles.stepSource}>From {labels.join('; ')}</span> : null}
+                </li>
+              )
+            })}
           </ol>
         ) : (
           <p className={styles.muted}>The backend returned no steps for this ticket.</p>
@@ -37,8 +51,8 @@ export function GroundedAnswerView({ response }: { response: AgentResponse }) {
         {response.sources.length > 0 ? (
           <>
             <p className={styles.note}>
-              Documentation passages returned with this answer. They support the answer as a whole; the backend does
-              not link individual steps to specific passages.
+              Passages accepted by the evidence gate and cited by the Writer. Each step above is copied word for word
+              from one of them.
             </p>
             <EvidenceList sources={response.sources} />
           </>

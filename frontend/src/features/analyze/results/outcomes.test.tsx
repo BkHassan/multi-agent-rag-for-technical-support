@@ -42,7 +42,7 @@ describe('grounded_answer', () => {
     expect(within(section('Summary')).getByText(grounded.summary as string)).toBeTruthy()
 
     const steps = within(section('Recommended steps')).getAllByRole('listitem')
-    expect(steps.map((item) => item.textContent)).toEqual(grounded.recommendations)
+    expect(steps.map((item) => item.firstChild?.textContent)).toEqual(grounded.recommendations)
 
     const evidence = section('Evidence')
     for (const passage of grounded.sources) {
@@ -51,14 +51,22 @@ describe('grounded_answer', () => {
     }
   })
 
-  it('does not attach sources to individual steps', () => {
-    render(<AnalysisResult response={grounded} />)
+  it('links each step to the passage it was copied from, as the backend Writer check does', () => {
+    const sources = [
+      source({ source: 'db.md', chunk_index: 2, excerpt: '## Fix\nCheck the   pool size.\nThen retry.' }),
+      source({ source: 'db.md', chunk_index: 3, excerpt: 'Check the pool size.\nRaise the limit if needed.' }),
+      source({ source: 'vpn.md', chunk_index: 0, excerpt: 'Confirm the split tunnel routes.' }),
+    ]
+    const recommendations = ['Check the pool size.', 'Confirm the split tunnel routes.', 'check the POOL size.']
+    render(<AnalysisResult response={{ ...grounded, recommendations, sources }} />)
 
-    const steps = section('Recommended steps')
-    for (const passage of grounded.sources) {
-      expect(within(steps).queryByText(new RegExp(passage.source.replace('.', '\\.')))).toBeNull()
-    }
-    expect(within(section('Evidence')).getByText(/does not link individual steps to specific passages/)).toBeTruthy()
+    const steps = within(section('Recommended steps')).getAllByRole('listitem')
+    // Whitespace is collapsed on both sides; overlapping chunks can both contain a step.
+    expect(within(steps[0]).getByText('From db.md, passage 3; db.md, passage 4')).toBeTruthy()
+    expect(within(steps[1]).getByText('From vpn.md, passage 1')).toBeTruthy()
+    // Case is kept, like the backend check, so this step gets no origin.
+    expect(within(steps[2]).queryByText(/^From /)).toBeNull()
+    expect(within(section('Evidence')).getByText(/accepted by the evidence gate and cited by the Writer/)).toBeTruthy()
   })
 
   it('opens the first document and keeps the rest collapsed', () => {
