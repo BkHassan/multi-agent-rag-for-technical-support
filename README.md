@@ -1,6 +1,6 @@
 # Multi-Agent RAG for Technical Support
 
-[![CI](https://github.com/BkHassan/agentic-rag-for-technical-support/actions/workflows/ci.yml/badge.svg)](https://github.com/BkHassan/agentic-rag-for-technical-support/actions/workflows/ci.yml)
+[![CI](https://github.com/BkHassan/multi-agent-rag-for-technical-support/actions/workflows/ci.yml/badge.svg)](https://github.com/BkHassan/multi-agent-rag-for-technical-support/actions/workflows/ci.yml)
 
 An assistant that analyzes IT support tickets and proposes troubleshooting steps **only when the internal documentation supports them**. When a ticket is too vague, it asks the reporter for the missing details. When the documentation cannot back an answer, it says so and routes the ticket to a person instead of guessing.
 
