@@ -29,8 +29,9 @@ export function AnalysisProgress({ ticketId }: { ticketId: string }) {
             Ticket <span className={styles.mono}>{ticketId}</span>
           </p>
           <p className={styles.progressDescription}>
-            The agent is classifying the ticket, retrieving documentation passages, and checking whether they support
-            an answer. This usually takes 5 to 30 seconds.
+            Triage classifies the ticket, the Researcher searches the documentation, the evidence gate checks the
+            passages, and the Writer drafts steps quoted from them. Most tickets take a few seconds; some take up to a
+            minute.
           </p>
           <p className={styles.slowNotice} role="status">
             {slow
