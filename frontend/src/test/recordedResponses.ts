@@ -1,6 +1,8 @@
 // Real AgentResponse bodies recorded from the backend by the evaluation runner
 // (evals/results/before_specificity_check.json, serialized with model_dump(mode="json"),
 // the same serialization FastAPI uses for the response). Used only as test fixtures.
+// They were recorded before the coordinator, when each excerpt was cut to 240 characters.
+// The current backend returns the full chunk text, so long-passage tests build their own sources.
 
 export const RECORDED_GROUNDED_ANSWER = {
   "ticket_id": "E-REL-001",

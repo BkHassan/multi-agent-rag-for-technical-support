@@ -399,6 +399,19 @@ details[open] > summary > .chevron {
   overflow-wrap: anywhere;
 }
 
+/* Long passages start clamped; the text is not cut, so search and screen readers get all of it. */
+.excerptCollapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.excerptToggle {
+  justify-self: start;
+}
+
 /* Rejected passages (fallback) */
 
 .rejected {

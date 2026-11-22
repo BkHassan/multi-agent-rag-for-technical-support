@@ -91,6 +91,34 @@ describe('grounded_answer', () => {
     expect(within(evidence).getByText('distance 0.310')).toBeTruthy()
     expect(within(evidence).getByText('No excerpt was returned for this passage.')).toBeTruthy()
   })
+
+  it('shows a long passage in full, clamped until expanded', async () => {
+    const user = userEvent.setup()
+    const excerpt = `## Symptoms ${'Connections time out under load. '.repeat(20)}End of passage.`
+    render(<AnalysisResult response={{ ...grounded, sources: [source({ source: 'db.md', excerpt })] }} />)
+
+    const evidence = section('Evidence')
+    const text = within(evidence).getByText(collapsed(excerpt))
+    expect(text.textContent).toBe(excerpt)
+
+    const toggle = within(evidence).getByRole('button', { name: 'Show full passage' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-controls')).toBe(text.id)
+    expect(text.className).toMatch(/excerptCollapsed/)
+
+    await user.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle.textContent).toBe('Show less')
+    expect(text.className).not.toMatch(/excerptCollapsed/)
+    expect(text.textContent).toBe(excerpt)
+  })
+
+  it('shows a short passage without an expand control', () => {
+    render(<AnalysisResult response={{ ...grounded, sources: [source({ source: 'db.md', excerpt: 'Check the pool size.' })] }} />)
+
+    expect(within(section('Evidence')).getByText('Check the pool size.')).toBeTruthy()
+    expect(within(section('Evidence')).queryByRole('button')).toBeNull()
+  })
 })
 
 describe('clarification_needed', () => {

@@ -27,7 +27,7 @@ export interface DocumentSource {
   category: string | null
   /** Chroma cosine distance; lower is closer. */
   distance: number | null
-  /** Preview of the chunk text, at most 240 characters. */
+  /** Full text of the retrieved chunk, up to about 2,000 characters (`chunk_size_chars`). */
   excerpt: string | null
 }
 
