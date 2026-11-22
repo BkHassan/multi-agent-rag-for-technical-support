@@ -1,18 +1,49 @@
-# Agentic Technical Support (RAG)
+# Multi-Agent RAG for Technical Support
 
-A multi-agent support assistant for IT tickets. It classifies a ticket, searches a small internal documentation base, and returns troubleshooting steps **only when retrieved documentation supports them**. When the ticket is too vague it asks clarifying questions, and when the documentation cannot support an answer it returns a fixed, application-owned fallback instead of guessing.
+[![CI](https://github.com/BkHassan/agentic-rag-for-technical-support/actions/workflows/ci.yml/badge.svg)](https://github.com/BkHassan/agentic-rag-for-technical-support/actions/workflows/ci.yml)
 
-**Intended use:** a demonstration and evaluation project, run on a fixed ticket set against a 14-document corpus. Results on that set show the designed behaviors work for those cases; they do **not** establish production reliability.
+An assistant that analyzes IT support tickets and proposes troubleshooting steps **only when the internal documentation supports them**. When a ticket is too vague, it asks the reporter for the missing details. When the documentation cannot back an answer, it says so and routes the ticket to a person instead of guessing.
 
-**Highlights**
+**Intended use:** a demonstration and evaluation project, run on a fixed ticket set against a 14-document knowledge base. The results show the designed behaviors work on that set; they do **not** establish production reliability.
 
-- Three Gemini agents (Triage, Researcher, Writer), orchestrated by a **Python Coordinator** that owns all control flow. The agents never call each other or act on their own.
-- A deterministic **evidence gate** decides whether the Writer runs at all. It is a heuristic retrieval filter: its thresholds were calibrated on ticket text, not on the queries it now scores (see [Limitations](#limitations-quota-and-security)).
-- Each step the Writer returns must appear word for word (ignoring whitespace) in the passage it cites, and so must its supporting quote. The host checks this in Python and drops any step that fails. The short summary is checked more loosely: it may not introduce filenames, numbers, commands, or destructive actions absent from the passages.
-- An evaluation harness that separates passes, failures, infrastructure errors, and unexecuted tickets, and records provider-reported token usage.
-- Request IDs, structured stage logs, and secret redaction, with no external monitoring service.
+## Contents
 
-## How it works
+[The problem](#the-problem) · [The solution](#the-solution) · [Architecture](#architecture) · [Design decisions](#design-decisions-and-trade-offs) · [Implementation](#implementation) · [Results](#results) · [Intended use and limitations](#intended-use-and-limitations) · [Getting started](#getting-started) · [Tests and evaluation](#tests-and-evaluation) · [Roadmap](#roadmap) · [Project layout](#project-layout)
+
+## The problem
+
+First-line IT support spends much of its time on tickets whose answer already exists in an internal runbook: a database that times out, a hostname that stopped resolving, an HTTP 504 on checkout. Finding the right runbook and the right section is slow, and different engineers give different answers to the same ticket.
+
+A general-purpose chatbot looks like the obvious fix, but it fails in a way that matters in support:
+
+- **It answers fluently even when it does not know.** A confident, invented step ("raise `max_connections` to 500", "restart the database") can cause an outage. In support, a wrong answer costs more than no answer.
+- **It cannot show where an answer came from,** so an engineer has to re-check everything it says.
+- **It answers vague tickets anyway.** "It stopped working after yesterday" gets a generic checklist instead of the one question that would make the ticket actionable.
+
+So the requirement is not "answer every ticket". It is:
+
+1. Answer only what the documentation backs, and show the exact passage for every step.
+2. Ask for details when the ticket does not say what fails.
+3. Say clearly when there is no documented answer, and hand the ticket to a person.
+
+## The solution
+
+Every ticket ends in exactly one of three outcomes, and each one is useful to the support team:
+
+| Outcome | When | What the team gets |
+|---|---|---|
+| `grounded_answer` | Relevant documentation exists and every step can be verified against it | Troubleshooting steps, each linked to the passage it was copied from |
+| `clarification_needed` | The ticket names no observable symptom | Two or three questions for the reporter, and no search is run |
+| `fallback` | No documented answer can be verified | A fixed message routing the ticket to manual review, plus the passages that were checked |
+
+Four principles shape the design:
+
+- **Evidence before answers.** The Writer only runs when a deterministic evidence gate accepts the retrieved passages. The gate is a heuristic retrieval filter, not a correctness check.
+- **Code decides, models propose.** Gemini agents produce typed outputs; a Python Coordinator owns every decision about what runs next and what the user sees.
+- **Every answer is traceable.** Each recommended step must appear word for word in the passage it cites, and the console shows that passage under the step.
+- **Measure, do not claim.** A held-out ticket set, a separate calibration set, and an evaluation harness that never counts an API error as a pass.
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -29,16 +60,52 @@ flowchart LR
 
 | Part | Role |
 |---|---|
-| **Coordinator** (Python) | Runs each stage at most once, validates every hand-off, applies timeouts, builds the response |
+| **Coordinator** (Python) | Runs each stage at most once, validates every hand-off, applies time limits, builds the response |
 | **Triage** (Gemini) | Category plus completeness facts: is it a troubleshooting request, which system, which symptom |
 | **Clarification policy** (Python) | Asks the reporter for detail when no observable symptom was stated; no search is run |
 | **Researcher** (Gemini) | Decides whether to search and writes the query; the host executes `search_technical_documentation` once |
 | **Evidence gate** (Python) | Accepts passages only if the best match is close enough and stands out from unrelated documents |
 | **Writer** (Gemini) | Writes steps from accepted passages only; unsupported steps are dropped |
 
-Details, a sequence diagram, the gate's limits, and error handling are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The agents never call each other or act on their own. A sequence diagram, the gate's rules, and error handling are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-### Outcomes
+## Design decisions and trade-offs
+
+| Decision | Why | Cost |
+|---|---|---|
+| **A Python Coordinator owns control flow**, not autonomous agents | Predictable, testable runs with bounded cost: at most one model call per agent, plus retries | No multi-step research: the Researcher gets one search per ticket |
+| **A deterministic evidence gate** decides whether the Writer runs, instead of asking the model | Reproducible decisions with thresholds fitted on 53 labeled calibration tickets | The thresholds were calibrated on ticket text but now score the Researcher's query (see [Limitations](#intended-use-and-limitations)) |
+| **Word-for-word verification** of each step and its quote | No invented commands, values, or filenames reach the user | Correct but paraphrased steps are dropped, so some answerable tickets fall back |
+| **Fixed, application-owned clarification and fallback text** | Prompt injection in a ticket cannot change what these outcomes say | Less tailored wording |
+| **Local ChromaDB in a single process** | No database server to run; one command starts everything | Not horizontally scalable; SQLite is not safe across workers |
+| **`gemini-3.5-flash-lite` as the configured model** | Fits the free-tier quota | Lower quality ceiling than larger models |
+
+## Implementation
+
+| Layer | Technology |
+|---|---|
+| Agents | Gemini through `google-genai`, structured (schema-checked) outputs |
+| Retrieval | ChromaDB with `gemini-embedding-001` embeddings over Markdown runbooks |
+| API | FastAPI: `POST /tickets/analyze`, `GET /health` |
+| Console | React, TypeScript, Vite; CSS modules with light and dark themes |
+| Packaging | Docker Compose (API plus nginx-served console) |
+| Quality | pytest, Vitest, oxlint, GitHub Actions |
+
+Key mechanisms:
+
+- **Typed hand-offs.** Every stage result is a Pydantic model that rejects unknown fields, and the run state is checked for consistency at each step.
+- **Grounding checks in code.** Each step the Writer returns must appear word for word (ignoring whitespace) in the passage it cites, and so must its supporting quote; numbers, filenames, commands, and destructive actions are checked too. The host drops any step that fails. The short summary is checked more loosely: it may not introduce filenames, numbers, commands, or destructive actions absent from the passages.
+- **Bounded time.** Triage, research, and the Writer each have a time limit (45 + 65 + 45 s); Gemini retries are skipped when they would pass the stage deadline. The console waits 160 s.
+- **Safe failures.** Every failure path ends in a fallback or a fixed error message; exception text, upstream messages, and keys never reach the client, and log records are redacted.
+- **Observability without a monitoring service.** Each response carries an `X-Request-ID`, and the API logs one line per stage with counts, codes, and durations, never ticket or passage text:
+
+  ```text
+  INFO app.events event=stage request_id=<id> stage=evidence_gate duration_ms=<ms> status=ok next=writing gate_decision=accepted reason_code=accepted accepted_count=<n> …
+  ```
+
+- **An explainable console.** It shows each step's source passage, the full passages with an expand toggle, the three outcomes with their own views, and specific error messages with the request ID.
+
+Response fields per outcome:
 
 | `outcome` | Meaning |
 |---|---|
@@ -88,9 +155,30 @@ A single live run on the 20-ticket held-out set, from 2026-10-26, using `gemini-
 | Latency p50 | 3.2 s |
 | Estimated cost | not estimated (no prices supplied) |
 
-The failed ticket (E-REL-005) fell back although relevant documents were found. The infrastructure error (E-REL-006) was a per-minute rate limit that outlasted the stage timeout. Citation correctness checks *which* documents are cited, not whether each sentence is faithful; sentence-level support is enforced at runtime by the Writer check above and is not scored separately. A single run of 20 tickets cannot show run-to-run variance. Earlier runs and their caveats are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#measured-results).
+The failed ticket (E-REL-005) fell back although relevant documents were found. The infrastructure error (E-REL-006) was a per-minute rate limit that outlasted the stage timeout. Citation correctness checks *which* documents are cited, not whether each sentence is faithful; sentence-level support is enforced at runtime by the Writer check and is not scored separately. A single run of 20 tickets cannot show run-to-run variance. Earlier runs and their caveats are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#measured-results).
 
-## Quick start
+## Intended use and limitations
+
+**Intended for:** demonstrating and evaluating evidence-grounded ticket analysis on a small, known documentation set, run locally by a trusted user.
+
+**Not intended for:** handling real customer tickets, replacing support engineers, or unattended use.
+
+- **Small corpus.** 14 Markdown documents, and a 20-ticket evaluation from single runs. Treat the results as evidence the mechanism works, not as a reliability figure.
+- **Clarification hinges on one Triage call.** The known regression E-REL-004 ("cannot resolve internal hostnames…") has been wrongly sent to clarification in some runs.
+- **Gate calibration mismatch.** The gate's thresholds were calibrated on ticket-text scores but now score the Researcher's query. Passing the gate means the passages are close to the query, not that the answer is correct.
+- **Answers vary between runs.** The Writer's output varies, so the same ticket can be grounded on one run and fall back on the next when no step survives the word-for-word check.
+- **Local, trusted use only.** The API has no authentication, rate limiting, or request-size limit on ticket fields, and clarification is single-turn. Add these before handling real tickets.
+- **Prompt injection.** A few unit tests check that injected instructions in tickets and passages cannot change an agent's role, tool call, or citations. There is no adversarial evaluation, so this is not a robustness claim.
+- **Quota.** Free-tier Gemini quotas are small. Evaluation runs have hit per-minute 429s and the daily cap, and `.env.example` warns that the code-default model allows very few free requests per day.
+- **Security.**
+  - Keys are never logged; log records are redacted.
+  - Keys are not built into images, and `.env` is git-ignored.
+  - Client errors carry fixed messages only.
+  - Ticket text and passages are treated as data, and citations and tool calls are checked in Python.
+
+More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#limitations).
+
+## Getting started
 
 Requires Python 3.12 (the version the Docker image and local runs use) and a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
 
@@ -159,6 +247,7 @@ The two model values differ on purpose. Without `LLM_MODEL`, the code uses `gemi
 
 ```bash
 pytest tests -q
+cd frontend && npm test
 ```
 
 **Live tests** are marked `live` and run only when you opt in:
@@ -189,21 +278,17 @@ python -m evaluation.calibrate_relevance                    # live: embeds the c
 python -m evaluation.calibrate_relevance --reuse-features   # offline: refit from saved scores
 ```
 
-## Limitations, quota, and security
+## Roadmap
 
-- **Small corpus.** 14 Markdown documents, and a 20-ticket evaluation from single runs. Treat the results as evidence the mechanism works, not as a reliability figure.
-- **Clarification hinges on one Triage call.** The known regression E-REL-004 ("cannot resolve internal hostnames…") has been wrongly sent to clarification in some runs.
-- **Gate calibration mismatch.** The gate's thresholds were calibrated on ticket-text scores but now score the Researcher's query. Passing the gate means the passages are close to the query, not that the answer is correct.
-- **Local, trusted use only.** The API has no authentication, rate limiting, or request-size limit on ticket fields, and clarification is single-turn. Add these before handling real tickets.
-- **Prompt injection.** A few unit tests check that injected instructions in tickets and passages cannot change an agent's role, tool call, or citations. There is no adversarial evaluation, so this is not a robustness claim.
-- **Quota.** Free-tier Gemini quotas are small. Evaluation runs have hit per-minute 429s and the daily cap, and `.env.example` warns that the code-default model allows very few free requests per day.
-- **Security.**
-  - Keys are never logged; log records are redacted.
-  - Keys are not built into images, and `.env` is git-ignored.
-  - Client errors carry fixed messages only.
-  - Ticket text and passages are treated as data, and citations and tool calls are checked in Python.
+Planned, not implemented:
 
-More detail, and the list of planned improvements, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#limitations).
+- Return the fallback reason and the Researcher's search query in the API response, so the console can explain every outcome.
+- Re-fit the gate thresholds on Researcher-query scores, or score the original ticket text again.
+- Report multi-run variance instead of single runs, and run the regression set against the multi-agent pipeline.
+- A readiness check (key configured, index present) separate from `/health`.
+- Authentication, rate limiting, and conversation state for clarification follow-ups.
+
+The full list is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#planned-not-implemented).
 
 ## Project layout
 
@@ -215,7 +300,7 @@ app/
   policies/               clarification.py, evidence.py (evidence gate)
   retrieval/              ingestion.py, retrieval.py (ChromaDB)
   tools/knowledge_base.py search tool definition
-  observability.py        request IDs, stage events, redaction
+  observability.py        request IDs, stage events, log output, redaction
   usage.py                per-request call and token counters
   config.py, schemas.py
 data/technical_docs/      the 14-document knowledge base
@@ -223,6 +308,8 @@ docs/ARCHITECTURE.md      design, limits, measured results
 evaluation/               datasets, run_evaluation.py, scoring.py, calibrate_relevance.py, results/
 frontend/                 browser console
 tests/                    offline tests (+ opt-in live tests)
+.github/workflows/ci.yml  continuous integration
+requirements*.txt, constraints.txt   runtime and dev dependencies, locked versions
 ```
 
 `app/agent.py`, `app/clarification.py`, and `app/rag/` are compatibility wrappers around the modules above.
