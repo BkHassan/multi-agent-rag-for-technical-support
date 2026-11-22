@@ -21,6 +21,6 @@ export const OUTCOME_META: Record<AgentOutcome, { label: string; tone: OutcomeTo
     label: 'Fallback',
     tone: 'neutral',
     icon: SearchX,
-    description: 'The documentation lacks enough relevant evidence, so no steps are suggested and the ticket needs manual review.',
+    description: 'No step could be backed by the documentation, so none are suggested and the ticket needs manual review.',
   },
 }

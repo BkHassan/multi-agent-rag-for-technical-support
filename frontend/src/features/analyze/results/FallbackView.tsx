@@ -14,8 +14,8 @@ export function FallbackView({ response }: { response: AgentResponse }) {
   return (
     <>
       <OutcomeHeader outcome="fallback" title="No reliable documented answer">
-        The available documentation does not contain enough relevant evidence, so the agent gives no troubleshooting
-        steps. Review this ticket manually.
+        The agent could not back any troubleshooting step with the available documentation, so it gives none.
+        Review this ticket manually.
       </OutcomeHeader>
 
       <section className={styles.section}>
@@ -45,7 +45,7 @@ export function FallbackView({ response }: { response: AgentResponse }) {
             Show the {rejectedCount} {rejectedCount === 1 ? 'passage' : 'passages'} that were checked and rejected
           </summary>
           <p className={styles.note}>
-            These passages did not meet the evidence requirements. They do not support any solution for this ticket.
+            These are the closest passages the agent checked. They do not support any solution for this ticket.
           </p>
           <EvidenceList sources={response.sources} openCount={0} />
         </details>

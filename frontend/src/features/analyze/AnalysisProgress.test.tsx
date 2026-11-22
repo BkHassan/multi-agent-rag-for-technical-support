@@ -39,6 +39,6 @@ describe('AnalysisProgress', () => {
     act(() => {
       vi.advanceTimersByTime(1_000)
     })
-    expect(notice.textContent).toMatch(/taking longer than usual.*after 90 seconds/)
+    expect(notice.textContent).toMatch(/taking longer than usual.*after 160 seconds/)
   })
 })

@@ -1,6 +1,7 @@
 """Application configuration for the agentic technical support RAG system."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -54,6 +55,9 @@ class Settings(BaseSettings):
     # Bounds for one coordinator step. The coordinator does not retry a timed-out call.
     model_call_timeout_seconds: float = Field(default=45.0, gt=0)
     tool_execution_timeout_seconds: float = Field(default=20.0, gt=0)
+
+    # Level of the API's own log lines (stage and request events are INFO).
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
 
 settings = Settings()

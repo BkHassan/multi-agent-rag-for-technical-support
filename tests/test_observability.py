@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import shlex
+import subprocess
+import sys
+import textwrap
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -329,3 +333,52 @@ def test_user_supplied_values_cannot_forge_log_lines(caplog: pytest.LogCaptureFi
     (record,) = [r for r in caplog.records if r.name == "app.main"]
     assert "\n" not in record.getMessage()
     assert "ticket_id=T-1\\nINFO app.events" in record.getMessage()
+
+
+def _run_python(code: str) -> subprocess.CompletedProcess[str]:
+    """A fresh interpreter, so logging starts the way a server process starts."""
+    return subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code)],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+
+
+def test_stage_events_are_printed_under_uvicorns_logging_config() -> None:
+    """`uvicorn app.main:app` configures only uvicorn's loggers; the API adds its own handler."""
+    result = _run_python(
+        """
+        import logging, logging.config, uvicorn.config
+        logging.config.dictConfig(uvicorn.config.LOGGING_CONFIG)
+        import app.main
+        from app import observability as obs
+        obs.configure_logging("INFO")
+        with obs.request_context("req-7"):
+            obs.log_event("stage", stage="triage", status="ok")
+        print(len(logging.getLogger("app").handlers))
+        """
+    )
+
+    assert result.stdout.strip() == "1"
+    assert result.stderr.count("event=stage") == 1
+    assert "INFO app.events event=stage request_id=req-7 stage=triage status=ok" in result.stderr
+
+
+def test_no_second_handler_when_the_root_logger_already_prints() -> None:
+    """CLI entry points call basicConfig; their lines must not appear twice."""
+    result = _run_python(
+        """
+        import logging
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+        import app.main
+        from app import observability as obs
+        obs.log_event("stage", stage="triage", status="ok")
+        print(len(logging.getLogger("app").handlers))
+        """
+    )
+
+    assert result.stdout.strip() == "0"
+    assert result.stderr.count("event=stage") == 1

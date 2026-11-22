@@ -1,10 +1,12 @@
-# Pinned to versions verified in this environment (Oct 2026).
-# Local persistent ChromaDB via the Python client — no separate server required.
+# Runtime dependencies of the API, pinned to the versions it is tested with.
+# Transitive versions are locked in constraints.txt:
+#   pip install -r requirements.txt -c constraints.txt
+# Test tools live in requirements-dev.txt.
 google-genai==1.31.0
+# Local persistent ChromaDB via the Python client; no separate server required.
 chromadb==1.5.9
-fastapi>=0.115.0,<1.0.0
-uvicorn>=0.30.0,<1.0.0
-pydantic>=2.0.0,<3.0.0
-pydantic-settings>=2.0.0,<3.0.0
-python-dotenv>=1.0.0,<2.0.0
-pytest>=8.0.0,<9.0.0
+fastapi==0.150.0
+uvicorn==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
+python-dotenv==1.2.4

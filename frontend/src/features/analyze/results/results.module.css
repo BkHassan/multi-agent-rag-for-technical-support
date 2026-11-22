@@ -181,6 +181,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The passage a step was copied from, under the step. */
+.stepSource {
+  display: block;
+  margin-top: var(--space-0-5);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  overflow-wrap: anywhere;
+}
+
 .notes {
   max-width: var(--measure);
   margin: 0;
@@ -397,6 +408,19 @@ details[open] > summary > .chevron {
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
   overflow-wrap: anywhere;
+}
+
+/* Long passages start clamped; the text is not cut, so search and screen readers get all of it. */
+.excerptCollapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.excerptToggle {
+  justify-self: start;
 }
 
 /* Rejected passages (fallback) */

@@ -5,6 +5,7 @@ import type { AgentResponse, DocumentSource } from '../../../api/types'
 import {
   RECORDED_CLARIFICATION_NEEDED,
   RECORDED_FALLBACK,
+  RECORDED_FALLBACK_NOT_A_PROBLEM,
   RECORDED_GROUNDED_ANSWER,
 } from '../../../test/recordedResponses'
 import { AnalysisResult } from '../AnalysisResult'
@@ -42,7 +43,7 @@ describe('grounded_answer', () => {
     expect(within(section('Summary')).getByText(grounded.summary as string)).toBeTruthy()
 
     const steps = within(section('Recommended steps')).getAllByRole('listitem')
-    expect(steps.map((item) => item.textContent)).toEqual(grounded.recommendations)
+    expect(steps.map((item) => item.firstChild?.textContent)).toEqual(grounded.recommendations)
 
     const evidence = section('Evidence')
     for (const passage of grounded.sources) {
@@ -51,18 +52,40 @@ describe('grounded_answer', () => {
     }
   })
 
-  it('does not attach sources to individual steps', () => {
+  it('links every step of a recorded backend answer to its passage', () => {
     render(<AnalysisResult response={grounded} />)
 
-    const steps = section('Recommended steps')
-    for (const passage of grounded.sources) {
-      expect(within(steps).queryByText(new RegExp(passage.source.replace('.', '\\.')))).toBeNull()
+    const steps = within(section('Recommended steps')).getAllByRole('listitem')
+    expect(steps).toHaveLength(grounded.recommendations.length)
+    for (const step of steps) {
+      expect(within(step).getByText('From database_connection_failures.md, passage 1')).toBeTruthy()
     }
-    expect(within(section('Evidence')).getByText(/does not link individual steps to specific passages/)).toBeTruthy()
+  })
+
+  it('links each step to the passage it was copied from, as the backend Writer check does', () => {
+    const sources = [
+      source({ source: 'db.md', chunk_index: 2, excerpt: '## Fix\nCheck the   pool size.\nThen retry.' }),
+      source({ source: 'db.md', chunk_index: 3, excerpt: 'Check the pool size.\nRaise the limit if needed.' }),
+      source({ source: 'vpn.md', chunk_index: 0, excerpt: 'Confirm the split tunnel routes.' }),
+    ]
+    const recommendations = ['Check the pool size.', 'Confirm the split tunnel routes.', 'check the POOL size.']
+    render(<AnalysisResult response={{ ...grounded, recommendations, sources }} />)
+
+    const steps = within(section('Recommended steps')).getAllByRole('listitem')
+    // Whitespace is collapsed on both sides; overlapping chunks can both contain a step.
+    expect(within(steps[0]).getByText('From db.md, passage 3; db.md, passage 4')).toBeTruthy()
+    expect(within(steps[1]).getByText('From vpn.md, passage 1')).toBeTruthy()
+    // Case is kept, like the backend check, so this step gets no origin.
+    expect(within(steps[2]).queryByText(/^From /)).toBeNull()
+    expect(within(section('Evidence')).getByText(/accepted by the evidence gate and cited by the Writer/)).toBeTruthy()
   })
 
   it('opens the first document and keeps the rest collapsed', () => {
-    const { container } = render(<AnalysisResult response={grounded} />)
+    const sources = [
+      source({ source: 'db.md', chunk_index: 0, excerpt: 'Check the pool size.' }),
+      source({ source: 'vpn.md', chunk_index: 1, excerpt: 'Confirm the split tunnel routes.' }),
+    ]
+    const { container } = render(<AnalysisResult response={{ ...grounded, sources }} />)
 
     const documents = Array.from(container.querySelectorAll('details'))
     expect(documents).toHaveLength(2)
@@ -90,6 +113,34 @@ describe('grounded_answer', () => {
     expect(within(evidence).getByText('Passage 3')).toBeTruthy()
     expect(within(evidence).getByText('distance 0.310')).toBeTruthy()
     expect(within(evidence).getByText('No excerpt was returned for this passage.')).toBeTruthy()
+  })
+
+  it('shows a long passage in full, clamped until expanded', async () => {
+    const user = userEvent.setup()
+    const excerpt = `## Symptoms ${'Connections time out under load. '.repeat(20)}End of passage.`
+    render(<AnalysisResult response={{ ...grounded, sources: [source({ source: 'db.md', excerpt })] }} />)
+
+    const evidence = section('Evidence')
+    const text = within(evidence).getByText(collapsed(excerpt))
+    expect(text.textContent).toBe(excerpt)
+
+    const toggle = within(evidence).getByRole('button', { name: 'Show full passage' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-controls')).toBe(text.id)
+    expect(text.className).toMatch(/excerptCollapsed/)
+
+    await user.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(toggle.textContent).toBe('Show less')
+    expect(text.className).not.toMatch(/excerptCollapsed/)
+    expect(text.textContent).toBe(excerpt)
+  })
+
+  it('shows a short passage without an expand control', () => {
+    render(<AnalysisResult response={{ ...grounded, sources: [source({ source: 'db.md', excerpt: 'Check the pool size.' })] }} />)
+
+    expect(within(section('Evidence')).getByText('Check the pool size.')).toBeTruthy()
+    expect(within(section('Evidence')).queryByRole('button')).toBeNull()
   })
 })
 
@@ -155,6 +206,14 @@ describe('fallback', () => {
 
     expect(screen.getByText('The backend did not include a message.')).toBeTruthy()
     expect(container.querySelector('details')).toBeNull()
+  })
+
+  it('does not blame the documentation, since a fallback can also mean the ticket is not a problem report', () => {
+    const { container } = render(<AnalysisResult response={RECORDED_FALLBACK_NOT_A_PROBLEM as AgentResponse} />)
+
+    expect(screen.getByText(/could not back any troubleshooting step/)).toBeTruthy()
+    expect(container.querySelector('details')).toBeNull()
+    expect(container.textContent).not.toMatch(/does not contain enough relevant evidence|did not meet the evidence/)
   })
 
   it('lists additional backend notes that differ from the message', () => {

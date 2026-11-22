@@ -1,8 +1,40 @@
+import { useId, useState } from 'react'
 import { ChevronRight, FileText } from 'lucide-react'
 import type { DocumentSource } from '../../../api/types'
-import { Badge } from '../../../components/ui'
+import { Badge, Button } from '../../../components/ui'
+import { cx } from '../../../lib/cx'
 import { groupSourcesByDocument } from './groupSources'
 import styles from './results.module.css'
+
+/** Passages longer than this start clamped to a few lines; shorter ones show in full with no control. */
+const COLLAPSE_AFTER_CHARS = 320
+
+/** The full passage text is always in the page; collapsing only clamps it visually. */
+function PassageText({ text }: { text: string }) {
+  const id = useId()
+  const [expanded, setExpanded] = useState(false)
+  const long = text.length > COLLAPSE_AFTER_CHARS
+
+  return (
+    <>
+      <blockquote id={id} className={cx(styles.excerpt, long && !expanded && styles.excerptCollapsed)}>
+        {text}
+      </blockquote>
+      {long ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className={styles.excerptToggle}
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? 'Show less' : 'Show full passage'}
+        </Button>
+      ) : null}
+    </>
+  )
+}
 
 interface EvidenceListProps {
   sources: ReadonlyArray<DocumentSource>
@@ -40,13 +72,13 @@ export function EvidenceList({ sources, openCount = 1 }: EvidenceListProps) {
                   <div className={styles.passageMeta}>
                     <span>{passageLabel(passage, passageIndex)}</span>
                     {passage.distance !== null ? (
-                      <span title="Cosine distance between the ticket and this passage; lower is closer.">
+                      <span title="Cosine distance between the search query and this passage; lower is closer.">
                         distance {passage.distance.toFixed(3)}
                       </span>
                     ) : null}
                   </div>
                   {passage.excerpt ? (
-                    <blockquote className={styles.excerpt}>{passage.excerpt}</blockquote>
+                    <PassageText text={passage.excerpt} />
                   ) : (
                     <p className={styles.muted}>No excerpt was returned for this passage.</p>
                   )}

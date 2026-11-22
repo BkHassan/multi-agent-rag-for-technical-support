@@ -1,10 +1,14 @@
 import { apiUrl } from './config'
-import { ApiError, errorFromResponse } from './errors'
+import { ApiError, errorFromResponse, withRequestId } from './errors'
 import { parseAgentResponse } from './parseAgentResponse'
 import type { AgentResponse, SupportTicket } from './types'
 
-/** Recorded end-to-end runs take 2–46 s (median about 11 s); the backend sets no timeout of its own. */
-export const ANALYZE_TIMEOUT_MS = 90_000
+/**
+ * The last evaluation run measured a 3.2 s median, 48.7 s p95, and 66 s maximum. The backend
+ * bounds each stage (triage 45 s, research 65 s, writer 45 s), so a run that succeeds can take
+ * up to about 155 s; the client waits slightly longer. Keep nginx's proxy_read_timeout above this.
+ */
+export const ANALYZE_TIMEOUT_MS = 160_000
 
 interface AnalyzeOptions {
   /** Aborting rejects with the original AbortError so callers can ignore it. */
@@ -61,8 +65,13 @@ export async function analyzeTicket(ticket: SupportTicket, options: AnalyzeOptio
       })
     }
 
-    if (!response.ok) throw errorFromResponse(response.status, body)
-    return parseAgentResponse(body)
+    const requestId = response.headers.get('X-Request-ID')
+    if (!response.ok) throw withRequestId(errorFromResponse(response.status, body), requestId)
+    try {
+      return parseAgentResponse(body)
+    } catch (error) {
+      throw error instanceof ApiError ? withRequestId(error, requestId) : error
+    }
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', forwardAbort)
