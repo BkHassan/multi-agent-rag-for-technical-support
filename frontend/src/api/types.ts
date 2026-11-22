@@ -36,8 +36,9 @@ export interface DocumentSource {
  *
  * - grounded_answer: `recommendations` are documented steps and `sources` back them.
  * - clarification_needed: `clarifying_questions` is filled; `recommendations` and `sources` are empty.
- * - fallback: `recommendations` holds only the fallback notice, and `sources` lists the
- *   closest chunks that were checked and rejected as insufficient evidence.
+ * - fallback: `recommendations` holds only the fallback notice. `sources` lists the closest
+ *   chunks when the evidence gate or the Writer's check rejected them; it is empty when no
+ *   search ran (for example, the ticket is not a problem report) or retrieval failed.
  */
 export interface AgentResponse {
   ticket_id: string

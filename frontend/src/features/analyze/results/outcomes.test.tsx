@@ -157,6 +157,13 @@ describe('fallback', () => {
     expect(container.querySelector('details')).toBeNull()
   })
 
+  it('does not blame the documentation, since a fallback can also mean the ticket is not a problem report', () => {
+    const { container } = render(<AnalysisResult response={{ ...fallback, sources: [] }} />)
+
+    expect(screen.getByText(/could not back any troubleshooting step/)).toBeTruthy()
+    expect(container.textContent).not.toMatch(/does not contain enough relevant evidence|did not meet the evidence/)
+  })
+
   it('lists additional backend notes that differ from the message', () => {
     render(
       <AnalysisResult
